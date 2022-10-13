@@ -54,6 +54,12 @@ module RSpec::EM
       def teardown_mocks_for_rspec
         EventMachine.reactor_running? ? false : super
       end
+
+      def verify_step_queue
+        if @__step_queue__&.size&.positive?
+          raise RuntimeError.new("EventMachine terminated before the end of the spec. #{@__step_queue__.size} async steps left to execute: #{@__step_queue__.map(&:first).join(', ')}")
+        end
+      end
     end
     
   end
@@ -69,10 +75,12 @@ class RSpec::Core::Example
       if @example_group_instance.is_a?(RSpec::EM::AsyncSteps::Scheduler)
         EventMachine.run { synchronous_run(*args, &block) }
         @example_group_instance.verify_mocks_for_rspec
-        @example_group_instance.teardown_mocks_for_rspec
+        @example_group_instance.verify_step_queue
       else
         synchronous_run(*args, &block)
       end
+    ensure
+      @example_group_instance.teardown_mocks_for_rspec if @example_group_instance.is_a?(RSpec::EM::AsyncSteps::Scheduler)
     end
   RUBY
 end
